@@ -6,10 +6,10 @@ import { requireMember, type Actor } from "./permissions";
 
 /** The four sections every event starts with (section 5.6). */
 export const DEFAULT_SECTIONS = [
-  { name: "General", colour: "#4f7cac", reserved: false },
-  { name: "Sponsors", colour: "#c9a227", reserved: true },
-  { name: "Seller friends and family", colour: "#5b9e6f", reserved: true },
-  { name: "Committee friends and family", colour: "#9a6bb5", reserved: true },
+  { kind: "general" as const, name: "General", colour: "#4f7cac", reserved: false },
+  { kind: "sponsors" as const, name: "Sponsors", colour: "#c9a227", reserved: true },
+  { kind: "seller_ff" as const, name: "Seller friends and family", colour: "#5b9e6f", reserved: true },
+  { kind: "committee_ff" as const, name: "Committee friends and family", colour: "#9a6bb5", reserved: true },
 ];
 
 export interface NewEvent {

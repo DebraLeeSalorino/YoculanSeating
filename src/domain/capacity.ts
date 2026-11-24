@@ -143,6 +143,29 @@ export async function assertCanSell(
   }
 }
 
+/**
+ * Throws if a reserved section has no room for `quantity` more sold or comped seats. A section
+ * is limited only once its tables are drawn; before the floor plan exists only venue capacity applies.
+ */
+export async function assertSectionRoom(tx: Tx, sectionId: string, quantity: number) {
+  const [row] = await tx
+    .select({
+      seats: sql<number>`(select count(*)::int from ${seats} s join ${tables} t on t.id = s.table_id where t.section_id = ${sectionId})`,
+      tableCount: sql<number>`(select count(*)::int from ${tables} t where t.section_id = ${sectionId})`,
+      used: sql<number>`(select count(*)::int from ${customers} c join ${groups} g on g.id = c.group_id
+        where g.section_id = ${sectionId} and c.deleted_at is null and c.ticket_type = 'seated'
+        and c.payment_status in ('paid','complimentary'))`,
+      name: sections.name,
+    })
+    .from(sections)
+    .where(eq(sections.id, sectionId));
+  if (!row) throw notFound("The section");
+  if (row.tableCount === 0) return;
+  if (row.used + quantity > row.seats) {
+    throw conflict(`${row.name} is full (${row.used} of ${row.seats} seats used). Add a table to it or use General.`);
+  }
+}
+
 /** Whether a group's allocation is general sale or reserved. */
 export async function allocationOf(q: Q, groupId: string | null | undefined): Promise<"general" | "reserved"> {
   if (!groupId) return "general";

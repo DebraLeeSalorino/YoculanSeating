@@ -26,6 +26,12 @@ and spec disagree, ask the owner rather than guessing; record decided changes in
 - Eventbrite orders are entered by hand by admins (spec 3.3). Keep `orders.channel` and
   `eventbrite_order_number` so an automatic import can be added later (spec 3.3.1).
 - Money is whole cents.
+- Sections have a stable `kind` (general, sponsors, seller_ff, committee_ff, custom). Rules use the
+  kind, never the name, because admins can rename sections.
+- A group with no `sectionId` is General. Reserved sections are limited only once their tables exist.
+- Tickets in one order keep their order with `orderPosition` (1 is the buyer); don't rely on
+  `createdAt`, which is identical within a transaction.
+- Times shown to buyers use the event's `timeZone`; the server runs in UTC.
 
 ## Commands
 - `npm test` — tests (needs Postgres; see README).

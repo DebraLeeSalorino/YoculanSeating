@@ -3,6 +3,7 @@ import { getCapacity } from "@/domain/capacity";
 import { listCustomers } from "@/domain/customers";
 import { getEvent } from "@/domain/events";
 import { listGroups } from "@/domain/groups";
+import { listSections } from "@/domain/comps";
 import { can, roleIn } from "@/domain/permissions";
 import { requireUser } from "@/lib/session";
 import { NoPermission } from "../no-permission";
@@ -37,10 +38,11 @@ export default async function CustomersPage({
   const actor = { userId: user.id };
   const { event, role } = await getEvent(actor, eventId);
   const validFilter = FILTERS.some(([f]) => f === filter) ? (filter as (typeof FILTERS)[number][0]) : "all";
-  const [customers, capacity, groups] = await Promise.all([
+  const [customers, capacity, groups, sections] = await Promise.all([
     listCustomers(actor, eventId, { search: q, filter: validFilter }),
     getCapacity(eventId),
     listGroups(actor, eventId),
+    listSections(actor, eventId),
   ]);
   const showContact = can(role, "seeContactDetails");
   const money = new Intl.NumberFormat(undefined, { style: "currency", currency: event.currency });
@@ -82,7 +84,13 @@ export default async function CustomersPage({
         </div>
       ) : null}
 
-      <QuickAdd eventId={eventId} groups={groups} />
+      <QuickAdd
+        eventId={eventId}
+        groups={groups}
+        canCompAny={can(role, "compAny")}
+        canCompFriends={can(role, "compFriendsAndFamily")}
+        sections={sections.filter((s) => s.reserved).map((s) => ({ id: s.id, name: s.name }))}
+      />
 
       <form className="row" style={{ marginBottom: "0.75rem" }} role="search">
         <div style={{ flexBasis: "260px" }}>

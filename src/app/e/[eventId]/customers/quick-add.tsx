@@ -15,14 +15,28 @@ interface GroupOption {
  * Quick-add row (section 3.2): type a name, press Enter, and the cursor comes back to the
  * name box for the next person. "With previous" keeps a party together as it is keyed in.
  */
-export function QuickAdd({ eventId, groups }: { eventId: string; groups: GroupOption[] }) {
+export function QuickAdd({
+  eventId,
+  groups,
+  canCompAny,
+  canCompFriends,
+  sections,
+}: {
+  eventId: string;
+  groups: GroupOption[];
+  canCompAny: boolean;
+  canCompFriends: boolean;
+  sections: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [ticketType, setTicketType] = useState<"seated" | "standing">("seated");
-  const [payment, setPayment] = useState<"" | "unpaid" | "cash">("");
+  const [payment, setPayment] = useState<"" | "unpaid" | "cash" | "comp">("");
+  const [compSection, setCompSection] = useState<string>("");
+  const [hostName, setHostName] = useState("");
   const [group, setGroup] = useState<string>("new");
   const [previousGroup, setPreviousGroup] = useState<{ id: string; label: string } | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error" | "warn"; text: string } | null>(null);
@@ -42,6 +56,8 @@ export function QuickAdd({ eventId, groups }: { eventId: string; groups: GroupOp
         people: [{ name, phone, email }],
         groupId,
         confirmDuplicates,
+        compSectionId: payment === "comp" && canCompAny ? compSection || null : null,
+        hostName: payment === "comp" ? hostName : null,
       });
       if (result.status === "error") {
         setMessage({ kind: "error", text: result.error });
@@ -52,7 +68,10 @@ export function QuickAdd({ eventId, groups }: { eventId: string; groups: GroupOp
         setMessage(null);
         return;
       }
-      setMessage({ kind: "ok", text: `Added ${name.trim()}.` });
+      setMessage({
+        kind: "ok",
+        text: payment === "comp" && !canCompAny ? `Added ${name.trim()}. The comp is waiting for an admin's approval.` : `Added ${name.trim()}.`,
+      });
       setPreviousGroup({ id: result.groupId, label: name.trim() });
       setDuplicates(null);
       setName("");
@@ -114,12 +133,36 @@ export function QuickAdd({ eventId, groups }: { eventId: string; groups: GroupOp
         </div>
         <div>
           <label htmlFor="qa-payment">Payment</label>
-          <select id="qa-payment" value={payment} onChange={(e) => setPayment(e.target.value as "" | "unpaid" | "cash")} required>
+          <select id="qa-payment" value={payment} onChange={(e) => setPayment(e.target.value as "" | "unpaid" | "cash" | "comp")} required>
             <option value="">Choose…</option>
             <option value="unpaid">Unpaid</option>
             <option value="cash">Cash received</option>
+            {canCompAny ? (
+              <option value="comp">Complimentary</option>
+            ) : canCompFriends ? (
+              <option value="comp">Comp: my friends and family (needs approval)</option>
+            ) : null}
           </select>
         </div>
+        {payment === "comp" && canCompAny && (
+          <div>
+            <label htmlFor="qa-section">Comp section</label>
+            <select id="qa-section" value={compSection} onChange={(e) => setCompSection(e.target.value)}>
+              <option value="">General</option>
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {payment === "comp" && (
+          <div>
+            <label htmlFor="qa-host">Whose guest</label>
+            <input id="qa-host" value={hostName} onChange={(e) => setHostName(e.target.value)} />
+          </div>
+        )}
         <div style={{ flexBasis: "180px" }}>
           <label htmlFor="qa-group">Group</label>
           <select id="qa-group" value={group} onChange={(e) => setGroup(e.target.value)}>

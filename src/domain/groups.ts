@@ -37,7 +37,7 @@ export async function firstMember(q: Q, groupId: string) {
     .select({ id: customers.id, name: customers.name })
     .from(customers)
     .where(and(eq(customers.groupId, groupId), isNull(customers.deletedAt)))
-    .orderBy(asc(customers.createdAt), asc(customers.id))
+    .orderBy(asc(customers.createdAt), asc(customers.orderPosition), asc(customers.id))
     .limit(1);
   return first;
 }

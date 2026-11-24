@@ -1,0 +1,49 @@
+import Link from "next/link";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { groups } from "@/db/schema";
+import { getCustomer } from "@/domain/customers";
+import { getEvent } from "@/domain/events";
+import { can, roleIn } from "@/domain/permissions";
+import { requireUser } from "@/lib/session";
+import { NoPermission } from "../../no-permission";
+import { EditCustomer } from "./edit";
+
+export default async function CustomerPage({ params }: { params: Promise<{ eventId: string; customerId: string }> }) {
+  const { eventId, customerId } = await params;
+  const user = await requireUser();
+  if (!can(await roleIn(user.id, eventId), "editCustomers")) return <NoPermission />;
+  const actor = { userId: user.id };
+  const { event, role } = await getEvent(actor, eventId);
+  const c = await getCustomer(actor, customerId);
+  const [group] = c.groupId ? await db.select().from(groups).where(eq(groups.id, c.groupId)) : [];
+  const money = new Intl.NumberFormat(undefined, { style: "currency", currency: event.currency });
+
+  return (
+    <div style={{ maxWidth: 760 }}>
+      <p>
+        <Link href={`/e/${eventId}/customers`}>← Customers</Link>
+      </p>
+      <h1>{c.name}</h1>
+      <p className="muted">
+        {c.ticketType === "seated" ? "Seated" : "Standing room"} · {money.format(c.priceCents / 100)} ·{" "}
+        <span className={`badge ${c.paymentStatus}`}>{c.paymentStatus.replace("_", " ")}</span>
+      </p>
+      <EditCustomer
+        eventId={eventId}
+        customer={{
+          id: c.id,
+          name: c.name,
+          phone: c.phoneDisplay,
+          email: c.email ?? "",
+          notes: c.notes ?? "",
+          unpaid: c.paymentStatus === "unpaid",
+        }}
+        group={group ? { id: group.id, name: group.name, automatic: group.nameIsAutomatic } : null}
+        canSeeContact={can(role, "seeContactDetails")}
+        canDelete={can(role, "deleteCustomers")}
+        canTakePayment={can(role, "takePayment")}
+      />
+    </div>
+  );
+}

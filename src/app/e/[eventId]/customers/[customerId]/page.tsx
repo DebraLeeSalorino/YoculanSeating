@@ -56,6 +56,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ event
         canSeeContact={can(role, "seeContactDetails")}
         canDelete={can(role, "deleteCustomers")}
         canTakePayment={can(role, "takePayment")}
+        payIds={unpaidInGroup.map((u) => u.id)}
       />
       <TicketActions
         eventId={eventId}

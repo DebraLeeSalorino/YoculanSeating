@@ -499,7 +499,7 @@ Seventeen entities cover the app. Every record also carries an id, created and u
 | Seat | number | Belongs to one table. Position is calculated from the table's shape and seat count, not stored. |
 | Assignment | customer, seat, locked, placed by (admin or auto) | One per customer and one per seat at most. All assignments in a group share one lock value and point to seats at one table, or at neighbouring tables when the group is split. |
 | Admin | name, email, password hash, role per event, invited by | Any signed-in user. Holds one role (admin, ticket seller or door staff) in each event they can access. Email is unique. |
-| Square connection | access credentials, location, paired terminals | One per event at most. Credentials are stored encrypted and never shown after setup. |
+| Square connection | location, paired terminals | One per event at most. The access token is kept in the hosting service's encrypted secret settings, not the database, and is never shown after setup. |
 | Table request | group, table, note, status, requested by, decided by, decided at, reason | At most one pending request per group. Status is pending, approved, declined or cancelled. |
 | Section | name, colour, reserved or general | Has many tables. A group's allocation points to a section or a sponsor, with an optional host. |
 | Sponsor | name, contact, confirmed for this year | Has one or more reserved tables. Copied sponsors start unconfirmed (section 15). |

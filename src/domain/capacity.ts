@@ -166,6 +166,22 @@ export async function assertSectionRoom(tx: Tx, sectionId: string, quantity: num
   }
 }
 
+/**
+ * Throws unless these unpaid tickets can be paid for now, under the same rules as a new sale.
+ * Call inside a transaction after lockEventSales.
+ */
+export async function assertCanPayFor(
+  tx: Tx,
+  eventId: string,
+  tickets: { ticketType: "seated" | "standing"; groupId: string | null }[],
+) {
+  for (const type of ["seated", "standing"] as const) {
+    const byGroup = new Map<string | null, number>();
+    for (const t of tickets.filter((t) => t.ticketType === type)) byGroup.set(t.groupId, (byGroup.get(t.groupId) ?? 0) + 1);
+    for (const [groupId, n] of byGroup) await assertCanSell(tx, eventId, type, n, await allocationOf(tx, groupId));
+  }
+}
+
 /** Whether a group's allocation is general sale or reserved. */
 export async function allocationOf(q: Q, groupId: string | null | undefined): Promise<"general" | "reserved"> {
   if (!groupId) return "general";

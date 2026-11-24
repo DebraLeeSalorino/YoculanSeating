@@ -292,8 +292,47 @@ export const payments = pgTable("payments", {
   takenBy: uuid("taken_by").references(() => users.id),
   takenAt: timestamp("taken_at", { withTimezone: true }).notNull().defaultNow(),
   squareReference: text("square_reference"),
+  /** Cash that should also be recorded in Square but couldn't be yet (spec 3.4). */
+  squarePending: boolean("square_pending").notNull().default(false),
   ...stamps(),
 });
+
+export const checkoutKindEnum = pgEnum("checkout_kind", ["terminal", "link"]);
+export const checkoutStatusEnum = pgEnum("checkout_status", ["pending", "completed", "canceled"]);
+
+/** A card payment started in the app and waiting for Square: on a Terminal, or by payment link. */
+export const checkouts = pgTable(
+  "checkouts",
+  {
+    id: id(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id),
+    kind: checkoutKindEnum("kind").notNull(),
+    customerIds: jsonb("customer_ids").$type<string[]>().notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull(),
+    status: checkoutStatusEnum("status").notNull().default("pending"),
+    deviceId: text("device_id"),
+    /** Terminal checkout id, or payment link id. */
+    squareCheckoutId: text("square_checkout_id"),
+    squareOrderId: text("square_order_id"),
+    url: text("url"),
+    squarePaymentId: text("square_payment_id"),
+    cancelReason: text("cancel_reason"),
+    /** Paid after tickets ran out (a payment link paid late, or a race). An admin resolves it. */
+    oversold: boolean("oversold").notNull().default(false),
+    oversoldResolvedAt: timestamp("oversold_resolved_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...stamps(),
+  },
+  (t) => [
+    index("checkouts_event_status").on(t.eventId, t.status),
+    index("checkouts_square_checkout").on(t.squareCheckoutId),
+    index("checkouts_square_order").on(t.squareOrderId),
+  ],
+);
 
 // ---------- Room ----------
 
@@ -423,8 +462,8 @@ export const squareConnections = pgTable("square_connections", {
     .notNull()
     .unique()
     .references(() => events.id),
-  /** Encrypted at rest; never shown after setup. */
-  encryptedCredentials: text("encrypted_credentials").notNull(),
+  // The access token is not stored here: it lives in the host's secret settings (SQUARE_ACCESS_TOKEN),
+  // which are encrypted and never shown after setup (spec section 8).
   locationId: text("location_id"),
   pairedTerminals: jsonb("paired_terminals").$type<{ deviceId: string; name: string }[]>().notNull().default([]),
   ...stamps(),

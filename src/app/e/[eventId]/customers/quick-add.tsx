@@ -39,7 +39,7 @@ export function QuickAdd({
   const [hostName, setHostName] = useState("");
   const [group, setGroup] = useState<string>("new");
   const [previousGroup, setPreviousGroup] = useState<{ id: string; label: string } | null>(null);
-  const [message, setMessage] = useState<{ kind: "ok" | "error" | "warn"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ kind: "ok" | "error" | "warn"; text: string; payIds?: string[] } | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -71,6 +71,7 @@ export function QuickAdd({
       setMessage({
         kind: "ok",
         text: payment === "comp" && !canCompAny ? `Added ${name.trim()}. The comp is waiting for an admin's approval.` : `Added ${name.trim()}.`,
+        payIds: payment === "unpaid" ? result.customerIds : undefined,
       });
       setPreviousGroup({ id: result.groupId, label: name.trim() });
       setDuplicates(null);
@@ -93,7 +94,14 @@ export function QuickAdd({
       }}
     >
       <h2 style={{ marginTop: 0 }}>Quick add</h2>
-      {message && <div className={`notice ${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>{message.text}</div>}
+      {message && (
+        <div className={`notice ${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>
+          {message.text}{" "}
+          {message.payIds && (
+            <a href={`/e/${eventId}/pay?ids=${message.payIds.join(",")}`}>Take payment by card</a>
+          )}
+        </div>
+      )}
       {duplicates && (
         <div className="notice warn" role="alert">
           {duplicates.map((d) => (
@@ -180,7 +188,7 @@ export function QuickAdd({
         </div>
       </div>
       <p className="muted" style={{ margin: "0.5rem 0 0", fontSize: "0.85rem" }}>
-        Press Enter to add. Card payments through Square arrive in the next update.
+        Press Enter to add. For a card payment, save as Unpaid and choose "Take payment by card".
       </p>
     </form>
   );

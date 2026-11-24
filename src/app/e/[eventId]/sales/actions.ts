@@ -5,6 +5,7 @@ import { approveComps, compUnpaidTickets, declineComps } from "@/domain/comps";
 import { takeCashPayment } from "@/domain/customers";
 import { refundTickets } from "@/domain/refunds";
 import { buyerPageLinkFor, resendBuyerPage } from "@/domain/buyer-page";
+import { resolveOversold, retryCashInSquare } from "@/domain/square";
 import { AppError } from "@/lib/errors";
 import { requireUser } from "@/lib/session";
 
@@ -51,4 +52,12 @@ export async function resendBuyerLinkAction(eventId: string, customerId: string)
     await resendBuyerPage({ userId }, customerId);
     return "Buyer page link emailed.";
   });
+}
+
+export async function resolveOversoldAction(eventId: string, checkoutId: string) {
+  return run(eventId, (userId) => resolveOversold({ userId }, checkoutId));
+}
+
+export async function retryCashAction(eventId: string) {
+  return run(eventId, (userId) => retryCashInSquare({ userId }, eventId));
 }

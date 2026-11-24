@@ -9,9 +9,9 @@ Release 1 (Sales) is in progress.
 
 | Done | Still to come in release 1 |
 | --- | --- |
-| Accounts, invitations, sign-in, password reset | Square Terminal and payment-link charging, and Square refunds |
-| Admin, ticket seller and door staff roles, enforced on the server | Real email sending (Amazon SES) |
-| Event switcher | Hosting on Render |
+| Accounts, invitations, sign-in, password reset | Real email sending (Amazon SES) |
+| Admin, ticket seller and door staff roles, enforced on the server | Hosting on Render, and Square's payment notifications |
+| Event switcher | |
 | Customers: add, quick-add, edit, delete, search, duplicate-email warning | |
 | Groups with automatic names | |
 | Eventbrite orders entered by hand | |
@@ -21,6 +21,7 @@ Release 1 (Sales) is in progress.
 | Refunds (cash and Eventbrite) | |
 | Buyer page and its email | |
 | Sales screen with totals by seller and channel | |
+| Square: terminal charges, payment links and codes, cash recorded in Square, refunds, terminal pairing | |
 
 ## Running it on your computer
 
@@ -37,6 +38,14 @@ npm run dev
 
 The setup command prints a link for choosing your password. Until email is set up, every email the
 app would send (invitations, password resets) is printed in the terminal and saved in `mail-log/`.
+
+## Square
+
+Set `SQUARE_ENVIRONMENT` (`sandbox` or `production`) and `SQUARE_ACCESS_TOKEN` to connect Square; leave
+them unset to run without it. Then, in Settings, choose the Square location and pair terminals. In the
+sandbox, "Add sandbox test terminal" adds Square's test device, which approves charges up to $25.
+
+Node's built-in `fetch` ignores `HTTPS_PROXY`. Behind a proxy, start the app with `NODE_USE_ENV_PROXY=1`.
 
 ## Tests
 

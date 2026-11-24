@@ -6,7 +6,8 @@ import { can } from "@/domain/permissions";
 import { listUnpaid, salesTotals, type SalesTotals } from "@/domain/reports";
 import { requireUser } from "@/lib/session";
 import { NoPermission } from "../no-permission";
-import { CashButton, CompDecision } from "./buttons";
+import { cashWaitingForSquare, listOpenCheckouts, listOversold, syncOpenCheckouts } from "@/domain/square";
+import { CompDecision, ResolveOversoldButton, RetryCashButton } from "./buttons";
 
 export default async function SalesPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
@@ -15,6 +16,13 @@ export default async function SalesPage({ params }: { params: Promise<{ eventId:
   const { event, role } = await getEvent(actor, eventId);
   if (!can(role, "takePayment")) return <NoPermission />;
 
+  // Pick up any card payments Square has confirmed since the last visit.
+  await syncOpenCheckouts(actor, eventId).catch(() => undefined);
+  const [openCheckouts, oversold, cashWaiting] = await Promise.all([
+    listOpenCheckouts(actor, eventId),
+    can(role, "refund") ? listOversold(actor, eventId) : Promise.resolve([]),
+    cashWaitingForSquare(eventId),
+  ]);
   const [capacity, unpaid, pending, totals] = await Promise.all([
     getCapacity(eventId),
     listUnpaid(actor, eventId),
@@ -57,6 +65,52 @@ export default async function SalesPage({ params }: { params: Promise<{ eventId:
           outstanding that may not all be honoured.
         </div>
       ) : null}
+
+      {oversold.map((o) => (
+        <div key={o.id} className="notice error">
+          A card payment of {m(o.amountCents)} for {o.customerIds.length} ticket{o.customerIds.length === 1 ? "" : "s"} arrived
+          after tickets had run out. Raise capacity in Settings or refund it, then{" "}
+          <ResolveOversoldButton eventId={eventId} checkoutId={o.id} />
+        </div>
+      ))}
+      {cashWaiting > 0 && (
+        <div className="notice warn">
+          {cashWaiting} cash payment{cashWaiting === 1 ? " hasn't" : "s haven't"} been recorded in Square yet.{" "}
+          <RetryCashButton eventId={eventId} />
+        </div>
+      )}
+
+      {openCheckouts.length > 0 && (
+        <>
+          <h2>Card payments in progress</h2>
+          <div className="table-wrap">
+            <table className="list">
+              <thead>
+                <tr>
+                  <th>Started</th>
+                  <th>How</th>
+                  <th>Tickets</th>
+                  <th>Amount</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {openCheckouts.map((c) => (
+                  <tr key={c.id}>
+                    <td>{new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short", timeZone: event.timeZone }).format(c.createdAt)}</td>
+                    <td>{c.kind === "terminal" ? "Terminal" : "Payment link"}</td>
+                    <td>{c.customerIds.length}</td>
+                    <td>{m(c.amountCents)}</td>
+                    <td>
+                      <Link href={`/e/${eventId}/pay/${c.id}`}>Open</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {can(role, "compFriendsAndFamily") && (
         <>
@@ -129,7 +183,9 @@ export default async function SalesPage({ params }: { params: Promise<{ eventId:
                     <td>{m(due)}</td>
                     <td>{g.seller}</td>
                     <td>
-                      <CashButton eventId={eventId} customerIds={g.rows.map((r) => r.id)} amount={m(due)} />
+                      <Link className="button secondary" href={`/e/${eventId}/pay?ids=${g.rows.map((r) => r.id).join(",")}`}>
+                        Take payment
+                      </Link>
                     </td>
                   </tr>
                 );
@@ -138,7 +194,6 @@ export default async function SalesPage({ params }: { params: Promise<{ eventId:
           </table>
         </div>
       )}
-      <p className="muted" style={{ fontSize: "0.85rem" }}>Card payments through Square arrive in a later update.</p>
 
       {totals && (
         <>

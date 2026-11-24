@@ -32,6 +32,10 @@ and spec disagree, ask the owner rather than guessing; record decided changes in
 - Tickets in one order keep their order with `orderPosition` (1 is the buyer); don't rely on
   `createdAt`, which is identical within a transaction.
 - Times shown to buyers use the event's `timeZone`; the server runs in UTC.
+- Square goes through `src/lib/square/client.ts` only (tests use `FakeSquare`; `SQUARE_MODE=fake`).
+  A ticket is Paid only after Square confirms; `syncCheckout` is the one place that records it and
+  must stay safe to call twice. Use the checkout's id as Square's idempotency key.
+- The Square access token is an environment variable, never stored in the database or repository.
 
 ## Commands
 - `npm test` — tests (needs Postgres; see README).

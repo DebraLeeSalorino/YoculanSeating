@@ -21,7 +21,8 @@ import {
 import { invalid, notFound, conflict } from "@/lib/errors";
 import { newToken } from "@/lib/auth/tokens";
 import { formatPhone, normalisePhone } from "@/lib/phone";
-import { allocationOf, assertCanSell, assertSectionRoom, lockEventSales } from "./capacity";
+import { allocationOf, assertCanPayFor, assertCanSell, assertSectionRoom, lockEventSales } from "./capacity";
+import { closeUnpayableLinks, hasOpenCheckout, recordCashInSquare, squareConnected } from "./square";
 import { sendBuyerPageEmail } from "./buyer-page";
 import { refreshGroup, uniqueAutoName } from "./groups";
 import { authorize, can, type Actor, type Role } from "./permissions";
@@ -207,6 +208,7 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
   // Pending comps hold no place, so only sales and approved comps are checked against capacity.
   const counts = paid || comp?.status === "complimentary";
   const status = paid ? ("paid" as const) : comp ? comp.status : ("unpaid" as const);
+  const cashPaymentIds: string[] = [];
   const result = await db.transaction(async (tx) => {
     await lockEventSales(tx, eventId);
     if (input.ticketType === "standing") {
@@ -281,18 +283,25 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
         .returning({ id: customers.id });
       customerIds.push(c!.id);
       if (paid) {
-        await tx.insert(payments).values({
-          customerId: c!.id,
-          kind: "payment",
-          amountCents: priceCents,
-          method: isEventbrite ? "eventbrite" : "cash",
-          takenBy: actor.userId,
-          updatedBy: actor.userId,
-        });
+        const [pay] = await tx
+          .insert(payments)
+          .values({
+            customerId: c!.id,
+            kind: "payment",
+            amountCents: priceCents,
+            method: isEventbrite ? "eventbrite" : "cash",
+            takenBy: actor.userId,
+            squarePending: !isEventbrite && squareConnected(),
+            updatedBy: actor.userId,
+          })
+          .returning({ id: payments.id });
+        if (!isEventbrite) cashPaymentIds.push(pay!.id);
       }
     }
     return { status: "created" as const, orderId: order!.id, groupId: groupId!, customerIds };
   });
+  await recordCashInSquare(eventId, cashPaymentIds);
+  if (counts) await closeUnpayableLinks(eventId);
   if (buyer.email) await sendBuyerPageEmail(result.orderId);
   return result;
 }
@@ -342,6 +351,7 @@ export async function sectionOfKind(eventId: string, kind: "general" | "sponsors
 export async function takeCashPayment(actor: Actor, eventId: string, customerIds: string[]) {
   await authorize(actor, eventId, "takePayment");
   if (!customerIds.length) throw invalid("Choose the tickets being paid for.");
+  const cashPaymentIds: string[] = [];
   await db.transaction(async (tx) => {
     await lockEventSales(tx, eventId);
     const rows = await tx
@@ -350,29 +360,29 @@ export async function takeCashPayment(actor: Actor, eventId: string, customerIds
       .where(and(eq(customers.eventId, eventId), inArray(customers.id, customerIds), isNull(customers.deletedAt)));
     if (rows.length !== customerIds.length) throw notFound("One of those tickets");
     if (rows.some((r) => r.paymentStatus !== "unpaid")) throw conflict("Only unpaid tickets can be paid for.");
-    for (const type of ["seated", "standing"] as const) {
-      const ofType = rows.filter((r) => r.ticketType === type);
-      if (!ofType.length) continue;
-      // Tickets in one call share a group in practice; check each group's allocation.
-      const byGroup = new Map<string | null, number>();
-      for (const r of ofType) byGroup.set(r.groupId, (byGroup.get(r.groupId) ?? 0) + 1);
-      for (const [groupId, n] of byGroup) await assertCanSell(tx, eventId, type, n, await allocationOf(tx, groupId));
+    if (await hasOpenCheckout(tx, customerIds)) {
+      throw conflict("A card payment is already in progress for these tickets. Cancel it first.");
     }
+    await assertCanPayFor(tx, eventId, rows);
     for (const r of rows) {
-      await tx.insert(payments).values({
+      const [pay] = await tx.insert(payments).values({
         customerId: r.id,
         kind: "payment",
         amountCents: r.priceCents,
         method: "cash",
         takenBy: actor.userId,
+        squarePending: squareConnected(),
         updatedBy: actor.userId,
-      });
+      }).returning({ id: payments.id });
+      cashPaymentIds.push(pay!.id);
       await tx
         .update(customers)
         .set({ paymentStatus: "paid", updatedAt: new Date(), updatedBy: actor.userId })
         .where(eq(customers.id, r.id));
     }
   });
+  await recordCashInSquare(eventId, cashPaymentIds);
+  await closeUnpayableLinks(eventId);
 }
 
 export interface CustomerEdit extends PersonInput {

@@ -15,7 +15,7 @@ import { AppError } from "@/lib/errors";
 import { requireUser } from "@/lib/session";
 
 export type SaleActionResult =
-  | { status: "created"; groupId: string; count: number }
+  | { status: "created"; groupId: string; count: number; customerIds: string[] }
   | { status: "duplicate"; matches: DuplicateMatch[] }
   | { status: "error"; error: string };
 
@@ -33,7 +33,7 @@ export async function saleAction(eventId: string, input: SaleInput): Promise<Sal
   const result = await run(() => createSale({ userId: user.id }, eventId, input));
   if (result.status === "created") {
     revalidatePath(`/e/${eventId}/customers`);
-    return { status: "created", groupId: result.groupId, count: result.customerIds.length };
+    return { status: "created", groupId: result.groupId, count: result.customerIds.length, customerIds: result.customerIds };
   }
   return result;
 }

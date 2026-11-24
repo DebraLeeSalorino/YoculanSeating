@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { approveCompsAction, cashForTicketsAction, declineCompsAction, type ActionResult } from "./actions";
+import { approveCompsAction, declineCompsAction, resolveOversoldAction, retryCashAction, type ActionResult } from "./actions";
 
 /** A button that runs a server action, optionally after a confirmation, and shows the outcome. */
 export function ActionButton({
@@ -59,13 +59,10 @@ export function CompDecision({ eventId, customerIds }: { eventId: string; custom
   );
 }
 
-export function CashButton({ eventId, customerIds, amount }: { eventId: string; customerIds: string[]; amount: string }) {
-  return (
-    <ActionButton
-      label="Cash received"
-      className="secondary"
-      confirmText={`Record ${amount} cash received for ${customerIds.length === 1 ? "this ticket" : `these ${customerIds.length} tickets`}?`}
-      run={() => cashForTicketsAction(eventId, customerIds)}
-    />
-  );
+export function ResolveOversoldButton({ eventId, checkoutId }: { eventId: string; checkoutId: string }) {
+  return <ActionButton label="Mark resolved" className="secondary" run={() => resolveOversoldAction(eventId, checkoutId)} />;
+}
+
+export function RetryCashButton({ eventId }: { eventId: string }) {
+  return <ActionButton label="Try again" className="secondary" run={() => retryCashAction(eventId)} />;
 }

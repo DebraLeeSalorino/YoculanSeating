@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { DuplicateMatch } from "@/domain/customers";
-import { deleteCustomerAction, renameGroupAction, takeCashAction, updateCustomerAction } from "../actions";
+import Link from "next/link";
+import { deleteCustomerAction, renameGroupAction, updateCustomerAction } from "../actions";
 
 interface Props {
   eventId: string;
@@ -12,9 +13,11 @@ interface Props {
   canSeeContact: boolean;
   canDelete: boolean;
   canTakePayment: boolean;
+  /** Unpaid tickets in the customer's group, paid for together. */
+  payIds: string[];
 }
 
-export function EditCustomer({ eventId, customer, group, canSeeContact, canDelete, canTakePayment }: Props) {
+export function EditCustomer({ eventId, customer, group, canSeeContact, canDelete, canTakePayment, payIds }: Props) {
   const router = useRouter();
   const [form, setForm] = useState(customer);
   const [groupName, setGroupName] = useState(group && !group.automatic ? group.name : "");
@@ -102,22 +105,11 @@ export function EditCustomer({ eventId, customer, group, canSeeContact, canDelet
       )}
 
       <div className="row" style={{ marginTop: "1rem" }}>
-        {customer.unpaid && canTakePayment && (
+        {customer.unpaid && canTakePayment && payIds.length > 0 && (
           <div className="shrink">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                if (!confirm("Record cash received for this ticket?")) return;
-                startTransition(async () => {
-                  const r = await takeCashAction(eventId, [customer.id]);
-                  setMessage(r.status === "error" ? { kind: "error", text: r.error } : { kind: "ok", text: "Cash payment recorded." });
-                  router.refresh();
-                });
-              }}
-            >
-              Cash received
-            </button>
+            <Link className="button" href={`/e/${eventId}/pay?ids=${payIds.join(",")}`}>
+              Take payment{payIds.length > 1 ? ` for the group's ${payIds.length} unpaid tickets` : ""}
+            </Link>
           </div>
         )}
         {canDelete && (

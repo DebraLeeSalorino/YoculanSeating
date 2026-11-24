@@ -4,7 +4,9 @@ import { getEvent } from "@/domain/events";
 import { can } from "@/domain/permissions";
 import { requireUser } from "@/lib/session";
 import { NoPermission } from "../no-permission";
+import { squareSettings } from "@/domain/square";
 import { SettingsFormView } from "./form";
+import { SquareSettings } from "./square-settings";
 
 const dollars = (cents: number) => (cents / 100).toFixed(2);
 
@@ -13,7 +15,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ event
   const user = await requireUser();
   const { event, role } = await getEvent({ userId: user.id }, eventId);
   if (!can(role, "manageEvent")) return <NoPermission />;
-  const capacity = await getCapacity(eventId);
+  const [capacity, square] = await Promise.all([getCapacity(eventId), squareSettings({ userId: user.id }, eventId)]);
 
   return (
     <>
@@ -43,6 +45,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ event
           seatsFromFloorPlan: capacity.fromFloorPlan,
           reservedSeats: capacity.reservedSeats,
         }}
+      />
+      <SquareSettings
+        eventId={eventId}
+        connected={square.connected}
+        environment={square.connected ? square.environment : undefined}
+        locationId={square.connected ? square.locationId : null}
+        locations={square.connected ? square.locations : []}
+        terminals={square.connected ? square.terminals : []}
+        error={square.connected ? square.error : null}
       />
     </>
   );

@@ -1,6 +1,7 @@
 import { afterAll, beforeEach } from "vitest";
 import { pool } from "@/db";
 import { getMailer, MemoryMailer } from "@/lib/mail/mailer";
+import { FakeSquare, getSquare } from "@/lib/square/client";
 
 beforeEach(async () => {
   const { rows } = await pool.query<{ tablename: string }>(
@@ -10,6 +11,7 @@ beforeEach(async () => {
     await pool.query(`truncate ${rows.map((r) => `"${r.tablename}"`).join(", ")} restart identity cascade`);
   }
   (getMailer() as MemoryMailer).clear();
+  (getSquare() as FakeSquare).reset();
 });
 
 afterAll(async () => {

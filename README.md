@@ -9,13 +9,18 @@ Release 1 (Sales) is in progress.
 
 | Done | Still to come in release 1 |
 | --- | --- |
-| Accounts, invitations, sign-in, password reset | Square Terminal and payment-link charging |
-| Admin, ticket seller and door staff roles, enforced on the server | Settings screen: prices, limits, capacity |
-| Event switcher | Comps with admin approval |
-| Customers: add, quick-add, edit, delete, search, duplicate-email warning | Refunds |
-| Groups with automatic names | Buyer page and its email |
-| Eventbrite orders entered by hand | Sales screen and seller totals |
-| Capacity, sell-out and standing-room rules | Real email sending (Amazon SES) |
+| Accounts, invitations, sign-in, password reset | Square Terminal and payment-link charging, and Square refunds |
+| Admin, ticket seller and door staff roles, enforced on the server | Real email sending (Amazon SES) |
+| Event switcher | Hosting on Render |
+| Customers: add, quick-add, edit, delete, search, duplicate-email warning | |
+| Groups with automatic names | |
+| Eventbrite orders entered by hand | |
+| Capacity, sell-out and standing-room rules | |
+| Settings: prices, limits, capacity, venue time zone | |
+| Comps with admin approval | |
+| Refunds (cash and Eventbrite) | |
+| Buyer page and its email | |
+| Sales screen with totals by seller and channel | |
 
 ## Running it on your computer
 

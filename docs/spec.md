@@ -672,6 +672,10 @@ The requirements were silent on the points below. Each line states what this spe
 * [ ] Every seller comp waits for an admin's approval, and a declined comp becomes an unpaid ticket (section 3.5).
 * [ ] Customer requests are handled by an admin by hand and are not used by auto-seating (section 6.7).
 
+- [ ] A declined seller comp becomes an unpaid ticket in General, since a paying guest no longer belongs in Seller friends and family (section 3.5).
+- [ ] A reserved section's seat limit applies once its tables are drawn; before the floor plan exists, comps there are limited only by venue capacity (sections 3.5 and 5.6).
+- [ ] Each event has a venue time zone in Settings, used for every date and time shown to buyers (section 3.7).
+
 - [ ] Next year's event is made by copying this year's, and its sales are opened by an admin's switch or at a scheduled time (section 15).
 - [ ] Sponsor table reservations carry over as "to confirm" rather than being cleared or kept automatically (section 15).
 - [ ] A returning customer is matched by email or phone number (section 15).

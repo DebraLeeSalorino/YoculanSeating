@@ -29,7 +29,8 @@ export default async function EventLayout({
         />
         <nav aria-label="Main">
           {can(role, "editCustomers") && <Link href={`/e/${eventId}/customers`}>Customers</Link>}
-          {can(role, "manageUsers") && <Link href={`/e/${eventId}/settings/users`}>Users</Link>}
+          {can(role, "takePayment") && <Link href={`/e/${eventId}/sales`}>Sales</Link>}
+          {can(role, "manageEvent") && <Link href={`/e/${eventId}/settings`}>Settings</Link>}
         </nav>
         <span className="spacer" />
         <span className="who">

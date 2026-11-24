@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { groups } from "@/db/schema";
+import { customers, groups, orders } from "@/db/schema";
+import { listSections } from "@/domain/comps";
 import { getCustomer } from "@/domain/customers";
 import { getEvent } from "@/domain/events";
 import { can, roleIn } from "@/domain/permissions";
 import { requireUser } from "@/lib/session";
 import { NoPermission } from "../../no-permission";
 import { EditCustomer } from "./edit";
+import { TicketActions } from "./ticket-actions";
 
 export default async function CustomerPage({ params }: { params: Promise<{ eventId: string; customerId: string }> }) {
   const { eventId, customerId } = await params;
@@ -18,6 +20,16 @@ export default async function CustomerPage({ params }: { params: Promise<{ event
   const c = await getCustomer(actor, customerId);
   const [group] = c.groupId ? await db.select().from(groups).where(eq(groups.id, c.groupId)) : [];
   const money = new Intl.NumberFormat(undefined, { style: "currency", currency: event.currency });
+  const [order] = c.orderId ? await db.select().from(orders).where(eq(orders.id, c.orderId)) : [];
+  const unpaidInGroup = c.groupId
+    ? await db
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.groupId, c.groupId), isNull(customers.deletedAt), eq(customers.paymentStatus, "unpaid")))
+    : c.paymentStatus === "unpaid"
+      ? [{ id: c.id }]
+      : [];
+  const sections = (await listSections(actor, eventId)).filter((s) => s.reserved);
 
   return (
     <div style={{ maxWidth: 760 }}>
@@ -28,6 +40,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ event
       <p className="muted">
         {c.ticketType === "seated" ? "Seated" : "Standing room"} · {money.format(c.priceCents / 100)} ·{" "}
         <span className={`badge ${c.paymentStatus}`}>{c.paymentStatus.replace("_", " ")}</span>
+        {group?.hostName && <> · guest of {group.hostName}</>}
       </p>
       <EditCustomer
         eventId={eventId}
@@ -43,6 +56,17 @@ export default async function CustomerPage({ params }: { params: Promise<{ event
         canSeeContact={can(role, "seeContactDetails")}
         canDelete={can(role, "deleteCustomers")}
         canTakePayment={can(role, "takePayment")}
+      />
+      <TicketActions
+        eventId={eventId}
+        customerId={c.id}
+        canRefund={can(role, "refund")}
+        isPaid={c.paymentStatus === "paid"}
+        unpaidGroupIds={unpaidInGroup.map((u) => u.id)}
+        canComp={can(role, "compAny")}
+        sections={sections.map((s) => ({ id: s.id, name: s.name }))}
+        hasOrder={!!order}
+        hasBuyerEmail={!!order?.buyerEmail}
       />
     </div>
   );

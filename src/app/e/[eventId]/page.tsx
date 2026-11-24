@@ -7,6 +7,7 @@ export default async function EventHome({ params }: { params: Promise<{ eventId:
   const user = await requireUser();
   const role = await roleIn(user.id, eventId);
   if (can(role, "editCustomers")) redirect(`/e/${eventId}/customers`);
+  if (can(role, "takePayment")) redirect(`/e/${eventId}/sales`);
   return (
     <div className="card">
       <h1>Welcome</h1>

@@ -136,6 +136,8 @@ export const events = pgTable("events", {
   status: eventStatusEnum("status").notNull().default("live"),
   salesOpen: boolean("sales_open").notNull().default(false),
   salesOpenAt: timestamp("sales_open_at", { withTimezone: true }),
+  /** IANA time zone of the venue, e.g. "America/New_York". Times shown to buyers use it. */
+  timeZone: text("time_zone").notNull().default("UTC"),
   /** ISO country used to read phone numbers typed without a country code. */
   defaultCountry: text("default_country").notNull().default("US"),
   currency: text("currency").notNull().default("USD"),
@@ -174,11 +176,15 @@ export const contacts = pgTable(
   (t) => [index("contacts_email").on(sql`lower(${t.email})`), index("contacts_phone").on(t.phone)],
 );
 
+export const sectionKindEnum = pgEnum("section_kind", ["general", "sponsors", "seller_ff", "committee_ff", "custom"]);
+
 export const sections = pgTable("sections", {
   id: id(),
   eventId: uuid("event_id")
     .notNull()
     .references(() => events.id),
+  /** Stable identity for the four built-in sections, so renaming one never changes the rules. */
+  kind: sectionKindEnum("kind").notNull().default("custom"),
   name: text("name").notNull(),
   colour: text("colour").notNull(),
   reserved: boolean("reserved").notNull(),
@@ -241,6 +247,8 @@ export const customers = pgTable(
       .references(() => events.id),
     contactId: uuid("contact_id").references(() => contacts.id),
     orderId: uuid("order_id").references(() => orders.id),
+    /** 1 for the buyer, then 2, 3... for the other tickets in the order. */
+    orderPosition: integer("order_position").notNull().default(1),
     groupId: uuid("group_id").references(() => groups.id),
     name: text("name").notNull(),
     /** Normalised E.164, e.g. +15551234567. */

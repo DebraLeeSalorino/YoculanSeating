@@ -15,17 +15,25 @@ import {
   orders,
   payments,
   seats,
+  sections,
   tables,
 } from "@/db/schema";
 import { invalid, notFound, conflict } from "@/lib/errors";
 import { newToken } from "@/lib/auth/tokens";
 import { formatPhone, normalisePhone } from "@/lib/phone";
-import { allocationOf, assertCanSell, lockEventSales } from "./capacity";
+import { allocationOf, assertCanSell, assertSectionRoom, lockEventSales } from "./capacity";
+import { sendBuyerPageEmail } from "./buyer-page";
 import { refreshGroup, uniqueAutoName } from "./groups";
-import { authorize, can, type Actor } from "./permissions";
+import { authorize, can, type Actor, type Role } from "./permissions";
 import { isValidEmail } from "./users";
 
-export type SalePayment = "unpaid" | "cash" | "eventbrite";
+/**
+ * How the tickets are settled when entered:
+ * - unpaid, cash, eventbrite (admins only)
+ * - comp: an admin's comp is Complimentary at once, in General or any section; a ticket seller's
+ *   comp is for their own friends and family and waits for an admin's approval (section 3.5).
+ */
+export type SalePayment = "unpaid" | "cash" | "eventbrite" | "comp";
 
 export interface PersonInput {
   name: string;
@@ -49,6 +57,10 @@ export interface SaleInput {
   priceCents?: number | null;
   /** Set after the user has seen the duplicate warning and chosen to save anyway. */
   confirmDuplicates?: boolean;
+  /** Admin comps: the section the guests are allocated to; null means General. */
+  compSectionId?: string | null;
+  /** Comps: whose guests these are, e.g. a committee member's name. */
+  hostName?: string | null;
 }
 
 export interface DuplicateMatch {
@@ -62,14 +74,14 @@ export type SaleResult =
   | { status: "created"; orderId: string; groupId: string; customerIds: string[] }
   | { status: "duplicate"; matches: DuplicateMatch[] };
 
-interface CleanPerson {
+export interface CleanPerson {
   name: string;
   phone: string | null;
   email: string | null;
   notes: string | null;
 }
 
-function cleanPerson(p: PersonInput, defaultCountry: string, fallbackName?: string): CleanPerson {
+export function cleanPerson(p: PersonInput, defaultCountry: string, fallbackName?: string): CleanPerson {
   const name = (p.name ?? "").trim() || fallbackName || "";
   if (!name) throw invalid("Enter a name.");
   if (name.length > 120) throw invalid("Names can be at most 120 characters.");
@@ -110,8 +122,12 @@ async function emailMatches(eventId: string, emails: string[], excludeCustomerId
     .map((r) => ({ kind: "email" as const, value: r.email!, customerId: r.id, customerName: r.name }));
 }
 
-/** Finds the person's contact record across years by email, then phone; creates one if none. */
-async function contactFor(tx: Tx, p: CleanPerson, actorId: string): Promise<string> {
+/**
+ * Finds the person's contact record across years by email, then phone; creates one if none.
+ * People with neither are not linked, since they can't be recognised another year (section 15).
+ */
+export async function contactFor(tx: Tx, p: CleanPerson, actorId: string | null): Promise<string | null> {
+  if (!p.email && !p.phone) return null;
   const conditions = [];
   if (p.email) conditions.push(sql`lower(${contacts.email}) = ${p.email.toLowerCase()}`);
   if (p.phone) conditions.push(eq(contacts.phone, p.phone));
@@ -134,10 +150,11 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
   const role = await authorize(actor, eventId, "editCustomers");
   const event = await loadEvent(eventId);
 
-  if (input.payment !== "unpaid" && input.payment !== "cash" && input.payment !== "eventbrite") {
+  if (!["unpaid", "cash", "eventbrite", "comp"].includes(input.payment ?? "")) {
     throw invalid("Choose whether the tickets are paid or unpaid.");
   }
   if (input.payment === "eventbrite") await authorize(actor, eventId, "enterEventbriteOrders");
+  const comp = input.payment === "comp" ? await resolveComp(actor, eventId, role, input) : null;
   if (input.ticketType !== "seated" && input.ticketType !== "standing") throw invalid("Choose a ticket type.");
   if (!input.people?.length) throw invalid("Add at least one ticket.");
   if (input.people.length > 200) throw invalid("That is more tickets than one order can hold.");
@@ -157,8 +174,14 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
   const orderNumber = isEventbrite ? (input.eventbriteOrderNumber ?? "").trim() || null : null;
 
   if (input.groupId) {
-    const [g] = await db.select({ eventId: groups.eventId }).from(groups).where(eq(groups.id, input.groupId));
+    const [g] = await db.select().from(groups).where(eq(groups.id, input.groupId));
     if (!g || g.eventId !== eventId) throw notFound("The group");
+    if (comp && (g.sectionId ?? null) !== comp.sectionId) {
+      throw invalid("Comps can only join a group in the same section. Start a new group instead.");
+    }
+    if (!comp && g.sectionId) {
+      throw invalid("That group is in a reserved section. Only comps can join it.");
+    }
   }
 
   if (!input.confirmDuplicates) {
@@ -180,15 +203,20 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
     if (matches.length) return { status: "duplicate", matches };
   }
 
-  const paid = input.payment !== "unpaid";
-  return db.transaction(async (tx) => {
+  const paid = input.payment === "cash" || input.payment === "eventbrite";
+  // Pending comps hold no place, so only sales and approved comps are checked against capacity.
+  const counts = paid || comp?.status === "complimentary";
+  const status = paid ? ("paid" as const) : comp ? comp.status : ("unpaid" as const);
+  const result = await db.transaction(async (tx) => {
     await lockEventSales(tx, eventId);
     if (input.ticketType === "standing") {
       // Standing room is offered only once seated tickets are gone, paid or not.
-      await assertCanSell(tx, eventId, "standing", paid ? people.length : 0);
+      await assertCanSell(tx, eventId, "standing", counts ? people.length : 0);
     }
-    if (paid && input.ticketType === "seated") {
-      await assertCanSell(tx, eventId, "seated", people.length, await allocationOf(tx, input.groupId));
+    if (counts && input.ticketType === "seated") {
+      const allocation = comp ? (comp.sectionId ? "reserved" : "general") : await allocationOf(tx, input.groupId);
+      await assertCanSell(tx, eventId, "seated", people.length, allocation);
+      if (comp?.sectionId) await assertSectionRoom(tx, comp.sectionId, people.length);
     }
 
     const [order] = await tx
@@ -217,6 +245,9 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
           eventId,
           name: typed || (await uniqueAutoName(tx, eventId, buyer.name)),
           nameIsAutomatic: !typed,
+          sectionId: comp?.sectionId ?? null,
+          hostUserId: comp?.hostUserId ?? null,
+          hostName: comp?.hostName ?? null,
           updatedBy: actor.userId,
         })
         .returning({ id: groups.id });
@@ -224,13 +255,14 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
     }
 
     const customerIds: string[] = [];
-    for (const p of people) {
+    for (const [index, p] of people.entries()) {
       const [c] = await tx
         .insert(customers)
         .values({
           eventId,
           contactId: await contactFor(tx, p, actor.userId),
           orderId: order!.id,
+          orderPosition: index + 1,
           groupId,
           name: p.name,
           phone: p.phone,
@@ -238,8 +270,11 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
           notes: p.notes,
           ticketType: input.ticketType,
           priceCents,
-          paymentStatus: paid ? "paid" : "unpaid",
+          paymentStatus: status,
           soldBy: isEventbrite ? null : actor.userId,
+          compGivenBy: comp ? actor.userId : null,
+          compHostUserId: comp?.hostUserId ?? null,
+          compApprovedBy: comp?.status === "complimentary" ? actor.userId : null,
           ticketCode: newToken(18),
           updatedBy: actor.userId,
         })
@@ -258,6 +293,49 @@ export async function createSale(actor: Actor, eventId: string, input: SaleInput
     }
     return { status: "created" as const, orderId: order!.id, groupId: groupId!, customerIds };
   });
+  if (buyer.email) await sendBuyerPageEmail(result.orderId);
+  return result;
+}
+
+interface CompPlan {
+  status: "complimentary" | "comp_pending";
+  sectionId: string | null;
+  hostUserId: string | null;
+  hostName: string | null;
+}
+
+/** Works out where a comp goes and whether it needs approval (section 3.5). */
+async function resolveComp(actor: Actor, eventId: string, role: Role, input: SaleInput): Promise<CompPlan> {
+  const hostName = (input.hostName ?? "").trim() || null;
+  if (can(role, "compAny")) {
+    let sectionId = input.compSectionId ?? null;
+    if (sectionId) {
+      const [s] = await db.select().from(sections).where(eq(sections.id, sectionId));
+      if (!s || s.eventId !== eventId) throw notFound("The section");
+      if (!s.reserved) sectionId = null; // General is represented as no reserved section.
+    }
+    const sellerFf = sectionId ? await sectionOfKind(eventId, "seller_ff") : null;
+    return {
+      status: "complimentary",
+      sectionId,
+      // An admin comping into seller friends and family is their own host.
+      hostUserId: sellerFf && sellerFf.id === sectionId ? actor.userId : null,
+      hostName,
+    };
+  }
+  await authorize(actor, eventId, "compFriendsAndFamily");
+  const ff = await sectionOfKind(eventId, "seller_ff");
+  if (!ff) throw invalid("This event has no Seller friends and family section.");
+  return { status: "comp_pending", sectionId: ff.id, hostUserId: actor.userId, hostName };
+}
+
+export async function sectionOfKind(eventId: string, kind: "general" | "sponsors" | "seller_ff" | "committee_ff") {
+  const [s] = await db
+    .select()
+    .from(sections)
+    .where(and(eq(sections.eventId, eventId), eq(sections.kind, kind)))
+    .limit(1);
+  return s;
 }
 
 /** Records cash for unpaid tickets. Refused before any money changes hands if tickets have run out. */
@@ -323,7 +401,10 @@ export async function updateCustomer(
       .update(customers)
       .set({ name: p.name, phone: p.phone, email: p.email, notes: p.notes, updatedAt: new Date(), updatedBy: actor.userId })
       .where(eq(customers.id, customerId));
-    if (existing.contactId && (p.email || p.phone)) {
+    if (!existing.contactId && (p.email || p.phone)) {
+      const contactId = await contactFor(tx, p, actor.userId);
+      await tx.update(customers).set({ contactId }).where(eq(customers.id, customerId));
+    } else if (existing.contactId && (p.email || p.phone)) {
       await tx
         .update(contacts)
         .set({

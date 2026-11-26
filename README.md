@@ -23,6 +23,10 @@ Release 1 (Sales) is in progress.
 | Sales screen with totals by seller and channel | |
 | Square: terminal charges, payment links and codes, cash recorded in Square, refunds, terminal pairing | |
 
+## Putting it online
+
+See [`docs/deploy.md`](docs/deploy.md) for Render, the domain, Amazon SES and Square's notifications.
+
 ## Running it on your computer
 
 You need Node.js 20 or later and PostgreSQL 16.

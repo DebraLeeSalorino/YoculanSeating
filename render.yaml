@@ -1,0 +1,53 @@
+# Render Blueprint: creates the app and its database. In Render, choose New > Blueprint and pick this
+# repository. Values marked "sync: false" are secrets you type into Render; they never go in the repository.
+services:
+  - type: web
+    name: yoculan-seating
+    runtime: node
+    plan: starter
+    region: virginia
+    branch: main
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    preDeployCommand: npm run db:migrate
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: yoculan-db
+          property: connectionString
+      # The app's public address. Leave unset until yoculantickets.com points at Render;
+      # until then links use Render's own address.
+      - key: APP_URL
+        sync: false
+      # "log" prints emails to Render's logs. Switch to "ses" once Amazon SES is approved.
+      - key: MAIL_TRANSPORT
+        value: log
+      - key: MAIL_FROM
+        value: Yoculan Tickets <tickets@yoculantickets.com>
+      - key: MAIL_REPLY_TO
+        value: admin@yoculantickets.com
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      # "sandbox" for testing; "production" with a production token for real sales.
+      - key: SQUARE_ENVIRONMENT
+        value: sandbox
+      - key: SQUARE_ACCESS_TOKEN
+        sync: false
+      - key: SQUARE_WEBHOOK_SIGNATURE_KEY
+        sync: false
+
+databases:
+  - name: yoculan-db
+    databaseName: yoculan
+    user: yoculan
+    plan: basic-256mb
+    region: virginia
+    postgresMajorVersion: "16"

@@ -779,10 +779,10 @@ How email is sent is not settled yet. The app sends six kinds of email, and the 
 
 **Decisions to make**
 
-- [ ] The domain and From address customers will see, and who controls that domain's settings.
-- [ ] Domain authentication (SPF, DKIM and DMARC) so tickets do not land in spam.
-- [ ] Which email delivery service to use.
-- [ ] Where customer replies go, and who reads them.
+- [x] Decided: the app lives at `yoculantickets.com`. Email comes from `Yoculan Tickets <tickets@yoculantickets.com>`. The domain is registered at GoDaddy and its DNS is managed there by the owner.
+- [x] Decided: DKIM through Amazon SES, SPF on the sending sub-domain `mail.yoculantickets.com` (the domain's own SPF record for its GoDaddy mailbox is left unchanged), and a DMARC record. Steps are in `docs/deploy.md`.
+- [x] Decided: Amazon SES.
+- [x] Decided: replies go to `admin@yoculantickets.com`, read by the owner.
 - [ ] Which emails admins can customise. Today it is the seat ticket; the buyer page link is a likely second.
 - [ ] The no-refund wording and any footer the emails must carry, such as a postal address.
 - [ ] Whether any email needs an unsubscribe link, or all count as transactional.
@@ -794,7 +794,7 @@ How email is sent is not settled yet. The app sends six kinds of email, and the 
 These sit outside the feature list and need a decision from the project owners.
 
 - [ ] Decided: the app is built with Claude Code, using this spec and its acceptance criteria as the brief. Decided: @Debra maintains it after launch and is an admin. GitHub, Eventbrite and Square accounts already exist. Still open: the budget and the email service (section 13). The first event is in November 2027, with tickets on sale as soon as possible.
-- [ ] Technology, hosting, backups and how quickly the app must be restored after a failure.
+- [ ] Decided: TypeScript, Next.js and Postgres, hosted on Render, with Render's daily database backups. Still open: how quickly the app must be restored after a failure.
 - [ ] Decided: customer details are kept indefinitely. The privacy notice on the buyer page must say so.
 - [ ] Eventbrite: set each event's ticket limit and no-refund policy by hand, and agree who enters Eventbrite orders and how often. Test the API only if the automatic connection (section 3.3.1) is taken up.
 - [ ] Square: decide how many Square Terminals are needed for sales points and the door, and test payment links for remote sales. The organisation is on Square's Free plan, which is all the app needs.
